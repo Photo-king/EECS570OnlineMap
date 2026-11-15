@@ -1,3 +1,4 @@
+import { bindMapGestures } from './gestures.mjs';
 import { floors } from './map-data.js';
 import { layers, projectToCampus } from './registration.mjs';
 import { validPosition, isWithinMap, pointInPolygon, polygonBounds, fitIndoorView } from './positioning.mjs';
@@ -8,20 +9,26 @@ $('#toggle-coordinates').hidden=!ENABLE_LOCATION_DEBUG;
 $('#coordinate-body').hidden=!ENABLE_LOCATION_DEBUG;
 $('#coordinate-body').inert=!ENABLE_LOCATION_DEBUG;
 for(const control of $('#test-form').querySelectorAll('input,button')) control.disabled=!ENABLE_LOCATION_DEBUG;
-let floor=floors[0], scale=1, minScale=.1, tx=0, ty=0, drag=null;
+let floor=floors[0], scale=1, minScale=.1, tx=0, ty=0;
 let watchId=null, position=null, expiry=null, watchGeneration=0, mode='gps', lastFixFailed=false;
 function indoorBounds(){return polygonBounds(layers.get(floor.id==='union'?'first':floor.id).polygon);}
+function fittedView(){
+  if(floor.id!=='union')return fitIndoorView(indoorBounds(),viewport.clientWidth,viewport.clientHeight);
+  const padding=window.innerWidth<=600?8:16;
+  const scale=Math.min((viewport.clientWidth-padding*2)/floor.width,(viewport.clientHeight-padding*2)/floor.height);
+  return {scale,tx:(viewport.clientWidth-floor.width*scale)/2,ty:(viewport.clientHeight-floor.height*scale)/2};
+}
 function transform(){
-  const fitted=fitIndoorView(indoorBounds(),viewport.clientWidth,viewport.clientHeight);
+  const fitted=fittedView();
   minScale=fitted.scale;scale=Math.max(minScale,scale);
   // At minimum zoom always restore the complete, centered floor plan.
   if(scale<=minScale*(1+1e-8)){scale=minScale;tx=fitted.tx;ty=fitted.ty;}
-  scene.style.transform=`translate(${tx}px,${ty}px) scale(${scale})`;
+  const activeScene=floor.id==='union'?$('#overview-scene'):scene;
+  activeScene.style.transform=`translate(${tx}px,${ty}px) scale(${scale})`;
   scene.style.setProperty('--inverse-scale',1/scale);$('#zoom-value').textContent=Math.round(scale/minScale*100)+'%';
 }
-function fit(){if(floor.id==='union')return;const view=fitIndoorView(indoorBounds(),viewport.clientWidth,viewport.clientHeight);({scale,tx,ty}=view);transform();}
+function fit(){const view=fittedView();({scale,tx,ty}=view);transform();}
 function zoom(factor,x=viewport.clientWidth/2,y=viewport.clientHeight/2){
-  if(floor.id==='union')return;
   const next=Math.max(minScale,Math.min(Math.max(20,minScale),scale*factor));
   tx=x-(x-tx)*next/scale;ty=y-(y-ty)*next/scale;scale=next;transform();
 }
@@ -106,15 +113,16 @@ $('#toggle-coordinates').onclick=()=>{if(!ENABLE_LOCATION_DEBUG)return;const hid
 async function copy(text,message){try{await navigator.clipboard.writeText(text);$('#announcement').textContent=message;}catch{window.prompt(message,text);}}
 $('#copy-coordinates').onclick=()=>ENABLE_LOCATION_DEBUG&&position&&copy(`${position.latitude.toFixed(8)}, ${position.longitude.toFixed(8)}`,'Coordinates copied');
 $('#share').onclick=()=>{const u=new URL(location.href);u.searchParams.set('level',floor.id);copy(u.href,'Level link copied');};
-viewport.addEventListener('wheel',e=>{if(floor.id==='union')return;if(e.target.closest('#map-reference'))return;e.preventDefault();const r=viewport.getBoundingClientRect();zoom(Math.exp(-e.deltaY*.0015),e.clientX-r.left,e.clientY-r.top);},{passive:false});
-viewport.addEventListener('pointerdown',e=>{if(floor.id==='union')return;if(e.target.closest('button,details')||(e.pointerType==='mouse'&&e.button!==0))return;drag={id:e.pointerId,x:e.clientX,y:e.clientY,tx,ty};viewport.setPointerCapture(e.pointerId);viewport.classList.add('dragging');});
-viewport.addEventListener('pointermove',e=>{if(!drag||drag.id!==e.pointerId)return;tx=drag.tx+e.clientX-drag.x;ty=drag.ty+e.clientY-drag.y;transform();});
-function endDrag(){drag=null;viewport.classList.remove('dragging');}
-for(const event of ['pointerup','pointercancel','lostpointercapture'])viewport.addEventListener(event,endDrag);
+viewport.addEventListener('wheel',e=>{if(e.target.closest('#map-reference'))return;e.preventDefault();const r=viewport.getBoundingClientRect();zoom(Math.exp(-e.deltaY*.0015),e.clientX-r.left,e.clientY-r.top);},{passive:false});
+const gestures=bindMapGestures(viewport,{
+  getView:()=>({scale,tx,ty,minScale,maxScale:Math.max(20,minScale)}),
+  setView:view=>{({scale,tx,ty}=view);transform();},
+});
+function endDrag(){gestures.cancel();}
 $('#plus').onclick=()=>zoom(1.25);$('#minus').onclick=()=>zoom(.8);$('#fit').onclick=fit;
 for(const id of ['map','overview-map']){$('#'+id).onerror=()=>$('#empty').hidden=false;}
 window.addEventListener('resize',fit);window.addEventListener('popstate',()=>selectFloor(new URL(location.href).searchParams.get('level'),false));window.addEventListener('pagehide',()=>clearWatch());
-// Collapsed reference on phones leaves room for the map; its state survives floor changes.
+// References start collapsed to leave room for the map; their state survives floor changes.
 $('#map-reference').open=false;
 if(window.innerHeight<=500){$('#coordinate-body').hidden=true;$('#toggle-coordinates').setAttribute('aria-expanded','false');$('#toggle-coordinates').textContent='Coordinates ▾';}
 selectFloor(new URL(location.href).searchParams.get('level'),false);
