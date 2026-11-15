@@ -1,7 +1,13 @@
 import { floors } from './map-data.js';
 import { layers, projectToCampus } from './registration.mjs';
 import { validPosition, isWithinMap, pointInPolygon, polygonBounds, fitIndoorView } from './positioning.mjs';
+// Development-only controls: disabled in the shared site. No URL override.
+const ENABLE_LOCATION_DEBUG = false;
 const $ = s => document.querySelector(s), viewport=$('#viewport'), scene=$('#scene');
+$('#toggle-coordinates').hidden=!ENABLE_LOCATION_DEBUG;
+$('#coordinate-body').hidden=!ENABLE_LOCATION_DEBUG;
+$('#coordinate-body').inert=!ENABLE_LOCATION_DEBUG;
+for(const control of $('#test-form').querySelectorAll('input,button')) control.disabled=!ENABLE_LOCATION_DEBUG;
 let floor=floors[0], scale=1, minScale=.1, tx=0, ty=0, drag=null;
 let watchId=null, position=null, expiry=null, watchGeneration=0, mode='gps', lastFixFailed=false;
 function indoorBounds(){return polygonBounds(layers.get(floor.id==='union'?'first':floor.id).polygon);}
@@ -41,14 +47,16 @@ function renderPosition(){
   const inside=pointInPolygon(p,polygon);
   marker.setAttribute('aria-label',`${mode==='test'?'Test position':'Your location'} · ${inside?'inside building':'outside building'}`);
   if(stale){status('Last known position · waiting for a fresh GPS fix…');return;}
-  status(`${mode==='test'?'TEST · ':''}${inside?'Inside Dental & Kellogg':'Outside building outline (GPS may drift indoors)'} · ${floor.id==='union'?'building overview':floor.name} ${mode==='gps'?`· ±${Math.round(position.accuracy)} m`:''}`);
+  status(ENABLE_LOCATION_DEBUG
+    ? `${mode==='test'?'TEST · ':''}${inside?'Inside Dental & Kellogg':'Outside building outline'} · ${floor.name} · ±${Math.round(position.accuracy)} m`
+    : `Location active · ${floor.name}`);
 }
 function renderReference(){
   const content=$('#reference-content');
   if(floor.id==='union'){
     content.innerHTML='<h3>Dental & Kellogg</h3><p>The green outline marks the building. Choose G, 1 or 2 to explore a floor plan.</p><h3>Choose a destination</h3><ul><li>Ground · Café 32, Sindecuse Atrium, Kellogg Auditorium, G360 SIM Lab</li><li>First · Check-in, Orthodontics, McCauley clinics, room 1033</li><li>Second · Pediatrics, Oral Surgery, DFA, Grad Restorative</li></ul><p>North is up.</p><details><summary>Original 3D reference</summary><img src="Mapsv1.0/Dental_Kellog_Union.png" alt="Original three-floor reference diagram"></details>';
   }else{
-    content.innerHTML=`<h3>${floor.name} · destinations & notes</h3><img src="public/maps/${floor.id}-notes.svg" alt="${floor.name} destination directory and museum exhibit notes"><h3>Map key & area colors</h3><img src="public/maps/first-key.svg" alt="Elevator, stairs, restroom and area color key"><p>Blue: GPS location. Amber: manual test. Gray: last known GPS fix.</p>`;
+    content.innerHTML=`<h3>${floor.name} · destinations & notes</h3><img src="public/maps/${floor.id}-notes.svg" alt="${floor.name} destination directory and museum exhibit notes"><h3>Map key & area colors</h3><img src="public/maps/first-key.svg" alt="Elevator, stairs, restroom and area color key"><p>Blue: your location. Gray: last known position.</p>`;
   }
 }
 function renderFloor(){
@@ -87,17 +95,17 @@ function startLocation(){
 }
 $('#locate').onclick=()=>watchId!==null?stopLocation('Location is off.'):startLocation();
 $('#test-form').onsubmit=e=>{
-  e.preventDefault();const lat=$('#test-latitude').value.trim(),lon=$('#test-longitude').value.trim();
+  e.preventDefault();if(!ENABLE_LOCATION_DEBUG)return;const lat=$('#test-latitude').value.trim(),lon=$('#test-longitude').value.trim();
   const test={latitude:Number(lat),longitude:Number(lon),accuracy:0,timestamp:Date.now()};
   if(!lat||!lon||!validPosition(test)){$('#test-error').textContent='Enter latitude −90 to 90 and longitude −180 to 180.';return;}
   clearWatch();mode='test';position=test;lastFixFailed=false;$('#test-error').textContent='';$('#locate').textContent='Enable GPS';renderPosition();
   if(isWithinMap(worldPosition(),indoorBounds()))$('#center-location').click();
 };
-$('#resume-gps').onclick=startLocation;
+$('#resume-gps').onclick=()=>{if(ENABLE_LOCATION_DEBUG)startLocation();};
 $('#center-location').onclick=()=>{const p=worldPosition();if(!p)return;scale=Math.max(scale,minScale*1.25);tx=viewport.clientWidth/2-p.x*scale;ty=viewport.clientHeight/2-p.y*scale;transform();};
-$('#toggle-coordinates').onclick=()=>{const hidden=!$('#coordinate-body').hidden;$('#coordinate-body').hidden=hidden;$('#toggle-coordinates').setAttribute('aria-expanded',String(!hidden));$('#toggle-coordinates').textContent=hidden?'Coordinates ▾':'Coordinates ▴';requestAnimationFrame(fit);};
+$('#toggle-coordinates').onclick=()=>{if(!ENABLE_LOCATION_DEBUG)return;const hidden=!$('#coordinate-body').hidden;$('#coordinate-body').hidden=hidden;$('#toggle-coordinates').setAttribute('aria-expanded',String(!hidden));$('#toggle-coordinates').textContent=hidden?'Coordinates ▾':'Coordinates ▴';requestAnimationFrame(fit);};
 async function copy(text,message){try{await navigator.clipboard.writeText(text);$('#announcement').textContent=message;}catch{window.prompt(message,text);}}
-$('#copy-coordinates').onclick=()=>position&&copy(`${position.latitude.toFixed(8)}, ${position.longitude.toFixed(8)}`,'Coordinates copied');
+$('#copy-coordinates').onclick=()=>ENABLE_LOCATION_DEBUG&&position&&copy(`${position.latitude.toFixed(8)}, ${position.longitude.toFixed(8)}`,'Coordinates copied');
 $('#share').onclick=()=>{const u=new URL(location.href);u.searchParams.set('level',floor.id);copy(u.href,'Level link copied');};
 viewport.addEventListener('wheel',e=>{if(floor.id==='union')return;if(e.target.closest('#map-reference'))return;e.preventDefault();const r=viewport.getBoundingClientRect();zoom(Math.exp(-e.deltaY*.0015),e.clientX-r.left,e.clientY-r.top);},{passive:false});
 viewport.addEventListener('pointerdown',e=>{if(floor.id==='union')return;if(e.target.closest('button,details')||(e.pointerType==='mouse'&&e.button!==0))return;drag={id:e.pointerId,x:e.clientX,y:e.clientY,tx,ty};viewport.setPointerCapture(e.pointerId);viewport.classList.add('dragging');});

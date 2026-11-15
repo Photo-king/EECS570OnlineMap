@@ -10,13 +10,13 @@ For G/1/2, the default and minimum zoom fit the **entire selected indoor footpri
 
 Legend & notes is fixed to the viewport, independently scrollable and collapsible. All G/1/2 levels use the First-floor symbol/color key, while destination notes remain floor-specific. Generated building assets remove rounded colored label chips and their duplicate glyph overlays, preserving original room lettering and area colors. GPS coordinates can also be collapsed. The page supports drag, wheel/button zoom, manual floor selection, level links for QR codes, copy coordinates and My location.
 
-## GPS and manual tests
+## GPS and development controls
 
-HTTPS is required for device GPS (localhost works for desktop). Enable location and grant browser permission; previously granted permission resumes automatically. Latitude, longitude, reported accuracy and last update time are shown continuously. Data stays in browser memory.
+HTTPS is required for device GPS (localhost works for desktop). Enable location and grant browser permission; previously granted permission resumes automatically. The public UI displays only the location marker and a simple active/waiting status. Geographic coordinates, accuracy, timestamps, copy-coordinate controls and manual coordinate tests are hidden.
 
-Open **Test a coordinate**, enter a latitude and longitude, then select **Show test position**. The default `42.2792, -83.7362` is an inside-building test. Test mode pauses GPS and labels the marker/readout TEST. Switching levels retains the test coordinate. **Return to GPS** resumes device updates.
+Development controls remain implemented behind `ENABLE_LOCATION_DEBUG = false` in `app.js`. With the flag off, the panel is hidden/inert, test inputs are disabled and submit/toggle handlers cannot activate test mode. There is no URL parameter to enable them. A developer can explicitly enable the flag locally to restore coordinate readouts and manual testing.
 
-Blue means live GPS, amber means manual test, gray means last known GPS position. Temporary errors keep the watcher active. All valid geographic fixes are rendered independently of the building boundary; the viewport naturally clips off-screen markers. Coordinate readouts keep updating even outside the building, with an explicit GPS-drift note. My location can recenter on an outside fix. Inside/outside status uses the traced building footprint.
+Blue means live location, gray means last known position. All valid fixes render regardless of the building boundary; off-screen markers are clipped by the viewport. Coordinates remain in browser memory and are not uploaded or persisted. Temporary errors keep the watcher active. My location can recenter on an outside fix.
 
 `registration.mjs` uses the original First-floor SVG as a shared indoor coordinate frame. Ground and Second register to its common corners with independent axis scale/translation, without rotation or shear. GPS projects into this same indoor frame; no outdoor raster registration influences map geometry or location. Calibration is based on the user's five Google Maps coordinates; field checks are still needed.
 
