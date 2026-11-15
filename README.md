@@ -12,7 +12,7 @@ Legend & notes is fixed to the viewport, independently scrollable and collapsibl
 
 ## GPS and development controls
 
-HTTPS is required for device GPS (localhost works for desktop). Enable location and grant browser permission; previously granted permission resumes automatically. The public UI displays only the location marker and a simple active/waiting status. Geographic coordinates, accuracy, timestamps, copy-coordinate controls and manual coordinate tests are hidden.
+HTTPS is required for device GPS (localhost works for desktop). Opening the webpage automatically starts location tracking and requests browser permission when needed, including on the Overview homepage. There is no Enable/Stop location button. Browsers retain control over permission prompts; previously denied access can be changed in browser settings. Returning through browser back/forward cache resumes tracking. The public UI displays only the location marker and a simple active/waiting status. Geographic coordinates, accuracy, timestamps, copy-coordinate controls and manual coordinate tests are hidden.
 
 Development controls remain implemented behind `ENABLE_LOCATION_DEBUG = false` in `app.js`. With the flag off, the panel is hidden/inert, test inputs are disabled and submit/toggle handlers cannot activate test mode. There is no URL parameter to enable them. A developer can explicitly enable the flag locally to restore coordinate readouts and manual testing.
 

@@ -75,13 +75,13 @@ function renderFloor(){
 function selectFloor(id,updateUrl=true){floor=floors.find(f=>f.id===id)||floors[0];if(updateUrl){const u=new URL(location.href);u.searchParams.set('level',floor.id);history.replaceState(null,'',u);}renderFloor();}
 function clearWatch(){watchGeneration++;if(watchId!==null)navigator.geolocation.clearWatch(watchId);watchId=null;clearTimeout(expiry);}
 function resetReadout(){for(const id of ['latitude','longitude','accuracy','updated'])$('#'+id).textContent='—';$('#copy-coordinates').disabled=true;$('#center-location').disabled=true;$('#user-position').hidden=true;}
-function stopLocation(message){clearWatch();position=null;lastFixFailed=false;resetReadout();$('#locate').textContent='Enable location';status(message);}
+function stopLocation(message){clearWatch();position=null;lastFixFailed=false;resetReadout();status(message);}
 function startLocation(){
   if(watchId!==null)return;
   mode='gps';position=null;lastFixFailed=false;resetReadout();renderPosition();
   if(!window.isSecureContext){status('Location requires HTTPS or localhost.');return;}
   if(!navigator.geolocation){status('This browser does not support location.');return;}
-  const generation=++watchGeneration;status('Waiting for location permission and a GPS fix…');$('#locate').textContent='Stop location';
+  const generation=++watchGeneration;status('Waiting for location permission and a GPS fix…');
   watchId=navigator.geolocation.watchPosition(result=>{
     if(generation!==watchGeneration||mode!=='gps')return;
     const next={latitude:result.coords.latitude,longitude:result.coords.longitude,accuracy:result.coords.accuracy,timestamp:result.timestamp};
@@ -93,12 +93,11 @@ function startLocation(){
     lastFixFailed=true;renderPosition();status(position?'GPS temporarily unavailable. Showing the last known position; retrying…':'Waiting for a GPS fix; retrying automatically…');
   },{enableHighAccuracy:true,maximumAge:5000,timeout:15000});
 }
-$('#locate').onclick=()=>watchId!==null?stopLocation('Location is off.'):startLocation();
 $('#test-form').onsubmit=e=>{
   e.preventDefault();if(!ENABLE_LOCATION_DEBUG)return;const lat=$('#test-latitude').value.trim(),lon=$('#test-longitude').value.trim();
   const test={latitude:Number(lat),longitude:Number(lon),accuracy:0,timestamp:Date.now()};
   if(!lat||!lon||!validPosition(test)){$('#test-error').textContent='Enter latitude −90 to 90 and longitude −180 to 180.';return;}
-  clearWatch();mode='test';position=test;lastFixFailed=false;$('#test-error').textContent='';$('#locate').textContent='Enable GPS';renderPosition();
+  clearWatch();mode='test';position=test;lastFixFailed=false;$('#test-error').textContent='';renderPosition();
   if(isWithinMap(worldPosition(),indoorBounds()))$('#center-location').click();
 };
 $('#resume-gps').onclick=()=>{if(ENABLE_LOCATION_DEBUG)startLocation();};
@@ -119,4 +118,6 @@ window.addEventListener('resize',fit);window.addEventListener('popstate',()=>sel
 $('#map-reference').open=false;
 if(window.innerHeight<=500){$('#coordinate-body').hidden=true;$('#toggle-coordinates').setAttribute('aria-expanded','false');$('#toggle-coordinates').textContent='Coordinates ▾';}
 selectFloor(new URL(location.href).searchParams.get('level'),false);
-if(navigator.permissions&&window.isSecureContext)navigator.permissions.query({name:'geolocation'}).then(p=>{if(p.state==='granted'&&mode==='gps')startLocation();}).catch(()=>{});
+// Request browser permission on entry, including the static overview homepage.
+startLocation();
+window.addEventListener('pageshow',event=>{if(event.persisted&&mode==='gps')startLocation();});
