@@ -1,0 +1,114 @@
+import { floors } from './map-data.js';
+import { layers, projectToCampus } from './registration.mjs';
+import { validPosition, isWithinMap, pointInPolygon, polygonBounds, fitIndoorView } from './positioning.mjs';
+const $ = s => document.querySelector(s), viewport=$('#viewport'), scene=$('#scene');
+let floor=floors[0], scale=1, minScale=.1, tx=0, ty=0, drag=null;
+let watchId=null, position=null, expiry=null, watchGeneration=0, mode='gps', lastFixFailed=false;
+function indoorBounds(){return polygonBounds(layers.get(floor.id==='union'?'first':floor.id).polygon);}
+function transform(){
+  const fitted=fitIndoorView(indoorBounds(),viewport.clientWidth,viewport.clientHeight);
+  minScale=fitted.scale;scale=Math.max(minScale,scale);
+  // At minimum zoom always restore the complete, centered floor plan.
+  if(scale<=minScale*(1+1e-8)){scale=minScale;tx=fitted.tx;ty=fitted.ty;}
+  scene.style.transform=`translate(${tx}px,${ty}px) scale(${scale})`;
+  scene.style.setProperty('--inverse-scale',1/scale);$('#zoom-value').textContent=Math.round(scale/minScale*100)+'%';
+}
+function fit(){if(floor.id==='union')return;const view=fitIndoorView(indoorBounds(),viewport.clientWidth,viewport.clientHeight);({scale,tx,ty}=view);transform();}
+function zoom(factor,x=viewport.clientWidth/2,y=viewport.clientHeight/2){
+  if(floor.id==='union')return;
+  const next=Math.max(minScale,Math.min(Math.max(20,minScale),scale*factor));
+  tx=x-(x-tx)*next/scale;ty=y-(y-ty)*next/scale;scale=next;transform();
+}
+function status(message){$('#location-status').textContent=message;}
+function worldPosition(){return position&&projectToCampus(position);}
+function renderPosition(){
+  const marker=$('#user-position');marker.hidden=true;$('#center-location').disabled=true;
+  $('#source-label').textContent=mode==='test'?'MANUAL TEST · WGS84':'LIVE GPS · WGS84';
+  $('#source-label').classList.toggle('test-source',mode==='test');
+  $('#marker-label').textContent=mode==='test'?'Test':'You';marker.classList.toggle('test-position',mode==='test');
+  $('#resume-gps').hidden=mode!=='test';
+  if(!position)return;
+  $('#latitude').textContent=position.latitude.toFixed(8);$('#longitude').textContent=position.longitude.toFixed(8);
+  $('#accuracy').textContent=mode==='test'?'Test input':`±${Math.round(position.accuracy)} m`;
+  $('#updated').textContent=new Date(position.timestamp).toLocaleTimeString();$('#copy-coordinates').disabled=false;
+  if(floor.id==='union')return;
+  const p=worldPosition(),stale=mode!=='test'&&(lastFixFailed||Date.now()-position.timestamp>30000);
+  marker.classList.toggle('stale',stale);
+  if(!p||!Number.isFinite(p.x)||!Number.isFinite(p.y)){status('Waiting for a valid position…');return;}
+  // Render every valid fix. The viewport clips off-screen dots, not the building bounds.
+  marker.style.left=p.x+'px';marker.style.top=p.y+'px';marker.hidden=false;$('#center-location').disabled=false;
+  const polygon=layers.get(floor.id==='union'?'first':floor.id).polygon;
+  const inside=pointInPolygon(p,polygon);
+  marker.setAttribute('aria-label',`${mode==='test'?'Test position':'Your location'} · ${inside?'inside building':'outside building'}`);
+  if(stale){status('Last known position · waiting for a fresh GPS fix…');return;}
+  status(`${mode==='test'?'TEST · ':''}${inside?'Inside Dental & Kellogg':'Outside building outline (GPS may drift indoors)'} · ${floor.id==='union'?'building overview':floor.name} ${mode==='gps'?`· ±${Math.round(position.accuracy)} m`:''}`);
+}
+function renderReference(){
+  const content=$('#reference-content');
+  if(floor.id==='union'){
+    content.innerHTML='<h3>Dental & Kellogg</h3><p>The green outline marks the building. Choose G, 1 or 2 to explore a floor plan.</p><h3>Choose a destination</h3><ul><li>Ground · Café 32, Sindecuse Atrium, Kellogg Auditorium, G360 SIM Lab</li><li>First · Check-in, Orthodontics, McCauley clinics, room 1033</li><li>Second · Pediatrics, Oral Surgery, DFA, Grad Restorative</li></ul><p>North is up.</p><details><summary>Original 3D reference</summary><img src="Mapsv1.0/Dental_Kellog_Union.png" alt="Original three-floor reference diagram"></details>';
+  }else{
+    content.innerHTML=`<h3>${floor.name} · destinations & notes</h3><img src="public/maps/${floor.id}-notes.svg" alt="${floor.name} destination directory and museum exhibit notes"><h3>Map key & area colors</h3><img src="public/maps/first-key.svg" alt="Elevator, stairs, restroom and area color key"><p>Blue: GPS location. Amber: manual test. Gray: last known GPS fix.</p>`;
+  }
+}
+function renderFloor(){
+  endDrag();
+  const overview=floor.id==='union';
+  $('main').classList.toggle('overview',overview);
+  viewport.classList.toggle('ground-floor',floor.id==='ground');
+  $('#overview-view').hidden=!overview;
+  $('#scene').hidden=overview;
+  $('#floor-title').textContent=floor.name;$('#map-label').textContent=floor.id==='union'?'BUILDING OVERVIEW':`DENTAL & KELLOGG · ${floor.name.toUpperCase()}`;
+  $('#empty').hidden=true;const image=$('#map');image.hidden=floor.id==='union';
+  if(floor.id!=='union'){image.src=floor.buildingMap;image.alt=`${floor.name}, Dental & Kellogg`;image.style.transform=`matrix(${layers.get(floor.id).matrix.join(',')})`;}
+  $('#floors').replaceChildren(...floors.map(f=>{const b=document.createElement('button');b.className='floor'+(f.id===floor.id?' active':'');b.setAttribute('aria-pressed',String(f.id===floor.id));b.innerHTML=`<strong>${f.label}</strong><span>${f.name}<small>${f.id==='union'?'Building & levels':'Dental & Kellogg'}</small></span>`;b.onclick=()=>selectFloor(f.id);return b;}));
+  renderReference();renderPosition();fit();
+}
+function selectFloor(id,updateUrl=true){floor=floors.find(f=>f.id===id)||floors[0];if(updateUrl){const u=new URL(location.href);u.searchParams.set('level',floor.id);history.replaceState(null,'',u);}renderFloor();}
+function clearWatch(){watchGeneration++;if(watchId!==null)navigator.geolocation.clearWatch(watchId);watchId=null;clearTimeout(expiry);}
+function resetReadout(){for(const id of ['latitude','longitude','accuracy','updated'])$('#'+id).textContent='—';$('#copy-coordinates').disabled=true;$('#center-location').disabled=true;$('#user-position').hidden=true;}
+function stopLocation(message){clearWatch();position=null;lastFixFailed=false;resetReadout();$('#locate').textContent='Enable location';status(message);}
+function startLocation(){
+  if(watchId!==null)return;
+  mode='gps';position=null;lastFixFailed=false;resetReadout();renderPosition();
+  if(!window.isSecureContext){status('Location requires HTTPS or localhost.');return;}
+  if(!navigator.geolocation){status('This browser does not support location.');return;}
+  const generation=++watchGeneration;status('Waiting for location permission and a GPS fix…');$('#locate').textContent='Stop location';
+  watchId=navigator.geolocation.watchPosition(result=>{
+    if(generation!==watchGeneration||mode!=='gps')return;
+    const next={latitude:result.coords.latitude,longitude:result.coords.longitude,accuracy:result.coords.accuracy,timestamp:result.timestamp};
+    if(!validPosition(next)||!Number.isFinite(next.timestamp)){lastFixFailed=true;renderPosition();status('Invalid GPS fix. Waiting for the next update…');return;}
+    position=next;lastFixFailed=false;renderPosition();clearTimeout(expiry);expiry=setTimeout(renderPosition,Math.max(0,30001-(Date.now()-position.timestamp)));
+  },error=>{
+    if(generation!==watchGeneration||mode!=='gps')return;
+    if(error.code===1){stopLocation('Location permission denied. Allow access in browser settings, then try again.');return;}
+    lastFixFailed=true;renderPosition();status(position?'GPS temporarily unavailable. Showing the last known position; retrying…':'Waiting for a GPS fix; retrying automatically…');
+  },{enableHighAccuracy:true,maximumAge:5000,timeout:15000});
+}
+$('#locate').onclick=()=>watchId!==null?stopLocation('Location is off.'):startLocation();
+$('#test-form').onsubmit=e=>{
+  e.preventDefault();const lat=$('#test-latitude').value.trim(),lon=$('#test-longitude').value.trim();
+  const test={latitude:Number(lat),longitude:Number(lon),accuracy:0,timestamp:Date.now()};
+  if(!lat||!lon||!validPosition(test)){$('#test-error').textContent='Enter latitude −90 to 90 and longitude −180 to 180.';return;}
+  clearWatch();mode='test';position=test;lastFixFailed=false;$('#test-error').textContent='';$('#locate').textContent='Enable GPS';renderPosition();
+  if(isWithinMap(worldPosition(),indoorBounds()))$('#center-location').click();
+};
+$('#resume-gps').onclick=startLocation;
+$('#center-location').onclick=()=>{const p=worldPosition();if(!p)return;scale=Math.max(scale,minScale*1.25);tx=viewport.clientWidth/2-p.x*scale;ty=viewport.clientHeight/2-p.y*scale;transform();};
+$('#toggle-coordinates').onclick=()=>{const hidden=!$('#coordinate-body').hidden;$('#coordinate-body').hidden=hidden;$('#toggle-coordinates').setAttribute('aria-expanded',String(!hidden));$('#toggle-coordinates').textContent=hidden?'Coordinates ▾':'Coordinates ▴';requestAnimationFrame(fit);};
+async function copy(text,message){try{await navigator.clipboard.writeText(text);$('#announcement').textContent=message;}catch{window.prompt(message,text);}}
+$('#copy-coordinates').onclick=()=>position&&copy(`${position.latitude.toFixed(8)}, ${position.longitude.toFixed(8)}`,'Coordinates copied');
+$('#share').onclick=()=>{const u=new URL(location.href);u.searchParams.set('level',floor.id);copy(u.href,'Level link copied');};
+viewport.addEventListener('wheel',e=>{if(floor.id==='union')return;if(e.target.closest('#map-reference'))return;e.preventDefault();const r=viewport.getBoundingClientRect();zoom(Math.exp(-e.deltaY*.0015),e.clientX-r.left,e.clientY-r.top);},{passive:false});
+viewport.addEventListener('pointerdown',e=>{if(floor.id==='union')return;if(e.target.closest('button,details')||(e.pointerType==='mouse'&&e.button!==0))return;drag={id:e.pointerId,x:e.clientX,y:e.clientY,tx,ty};viewport.setPointerCapture(e.pointerId);viewport.classList.add('dragging');});
+viewport.addEventListener('pointermove',e=>{if(!drag||drag.id!==e.pointerId)return;tx=drag.tx+e.clientX-drag.x;ty=drag.ty+e.clientY-drag.y;transform();});
+function endDrag(){drag=null;viewport.classList.remove('dragging');}
+for(const event of ['pointerup','pointercancel','lostpointercapture'])viewport.addEventListener(event,endDrag);
+$('#plus').onclick=()=>zoom(1.25);$('#minus').onclick=()=>zoom(.8);$('#fit').onclick=fit;
+for(const id of ['map','overview-map']){$('#'+id).onerror=()=>$('#empty').hidden=false;}
+window.addEventListener('resize',fit);window.addEventListener('popstate',()=>selectFloor(new URL(location.href).searchParams.get('level'),false));window.addEventListener('pagehide',()=>clearWatch());
+// Collapsed reference on phones leaves room for the map; its state survives floor changes.
+$('#map-reference').open=false;
+if(window.innerHeight<=500){$('#coordinate-body').hidden=true;$('#toggle-coordinates').setAttribute('aria-expanded','false');$('#toggle-coordinates').textContent='Coordinates ▾';}
+selectFloor(new URL(location.href).searchParams.get('level'),false);
+if(navigator.permissions&&window.isSecureContext)navigator.permissions.query({name:'geolocation'}).then(p=>{if(p.state==='granted'&&mode==='gps')startLocation();}).catch(()=>{});
