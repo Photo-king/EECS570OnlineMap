@@ -85,9 +85,9 @@ if action == 'deploy':
         raise RuntimeError('nginx configuration differs. Back up, apply and validate this site configuration separately before deploying.')
     target = RELEASES / ('release-' + revision[:12])
     if not target.exists():
-        with tempfile.TemporaryDirectory(prefix='eecs570-release-') as temp:
+        with tempfile.TemporaryDirectory(prefix='entr550-release-') as temp:
             archive = Path(temp) / 'source.tar.gz'
-            subprocess.run(['curl', '-fsSL', '--connect-timeout', '10', '--max-time', '120', 'https://codeload.github.com/Photo-king/EECS570OnlineMap/tar.gz/' + revision, '-o', str(archive)], check=True)
+            subprocess.run(['curl', '-fsSL', '--connect-timeout', '10', '--max-time', '120', 'https://codeload.github.com/Photo-king/ENTR550OnlineMap/tar.gz/' + revision, '-o', str(archive)], check=True)
             extracted = Path(temp) / 'source'
             extracted.mkdir()
             with tarfile.open(str(archive)) as tar:
@@ -103,7 +103,7 @@ if action == 'deploy':
                     destination = stage / name
                     destination.parent.mkdir(parents=True, exist_ok=True)
                     shutil.copy2(str(source / name), str(destination))
-                info = {'revision': revision, 'short_revision': revision[:12], 'deployed_at': datetime.datetime.now(datetime.timezone.utc).isoformat(), 'source': 'https://github.com/Photo-king/EECS570OnlineMap/commit/' + revision, 'assets': payload['assets']}
+                info = {'revision': revision, 'short_revision': revision[:12], 'deployed_at': datetime.datetime.now(datetime.timezone.utc).isoformat(), 'source': 'https://github.com/Photo-king/ENTR550OnlineMap/commit/' + revision, 'assets': payload['assets']}
                 (stage / 'version.json').write_text(json.dumps(info, indent=2) + '\n')
                 for root, dirs, files in os.walk(str(stage)):
                     os.chmod(root, 0o755)

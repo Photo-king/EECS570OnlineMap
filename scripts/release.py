@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Release only committed, pushed EECS570 sources; audit or roll back this site."""
+"""Release only committed, pushed ENTR550 sources; audit or roll back this site."""
 import argparse
 import hashlib
 import json

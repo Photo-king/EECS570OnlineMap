@@ -2,7 +2,7 @@
 
 线上入口：**https://map.solvaneon.com/**
 
-源码仓库：https://github.com/Photo-king/EECS570OnlineMap
+源码仓库：https://github.com/Photo-king/ENTR550OnlineMap
 
 纯静态 HTML / CSS / JavaScript 项目，无构建步骤、后端、数据库或地图 API Key。
 
