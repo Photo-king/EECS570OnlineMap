@@ -2,6 +2,13 @@
 
 完整提交以 Git 历史为准；已验证的线上版本使用 `release-<SHA前12位>` 标签及 `/version.json` 追踪。
 
+## 2026-11-19 — 三层地图更新
+
+- 更新 Ground、First、Second 为新提供的 Team 2D corridor draft SVG，Overview 保持原图。
+- 适配展开后的 SVG 路径和蒙版，继续移除图纸标题、边框和标签底色，保留源图墙线、图标及房间文字。
+- 保留 Grad Restorative 和一楼南北入口标注，消除 Second 的重复文字，扩展一楼初始显示范围。
+- 重新生成独立图例与楼层说明，保留原定位控制点。
+
 ## 手机触摸与可追溯发布
 
 - Overview、Ground、First、Second 全部支持双指缩放和放大后拖动，缩到下限恢复完整图纸。

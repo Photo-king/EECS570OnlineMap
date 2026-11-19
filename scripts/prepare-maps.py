@@ -1,6 +1,7 @@
 """Derive transparent building SVGs and independent reference panels. Originals stay intact."""
 import copy
 import json
+import re
 import xml.etree.ElementTree as E
 from pathlib import Path
 S='http://www.w3.org/2000/svg'; E.register_namespace('',S)
@@ -18,38 +19,62 @@ for name,outline,factor in [('Ground',ground,1),('First',first,1),('Second',seco
  root=E.Element(tag('svg'),{'viewBox':'0 0 2280 1650','width':'2280','height':'1650','fill':'none'})
  defs=copy.deepcopy(source.find(tag('defs'))); root.append(defs)
  clip=E.SubElement(defs,tag('clipPath'),{'id':'building-outline','clipPathUnits':'userSpaceOnUse'})
- if name=='Ground':
-  # The artwork is isolated between the notes and key. A rectangle preserves
-  # every original exterior/courtyard wall and avoids inventing boundary lines.
-  E.SubElement(clip,tag('rect'),{'x':'745','y':'320','width':'1065','height':'1135'})
- else:
-  E.SubElement(clip,tag('polygon'),{'points':' '.join(f'{x},{y}' for x,y in points)})
+ # Crop the artwork, not the approximate footprint: keep all exterior walls
+ # and the new First-floor entrance labels outside the building perimeter.
+ crops={
+  'Ground':('745','320','1065','1135'),
+  'First':('550','280','1160','1260'),
+  'Second':('735','315','1075','1185'),
+ }
+ E.SubElement(clip,tag('rect'),dict(zip(('x','y','width','height'),crops[name])))
+ if name=='First':
+  E.SubElement(clip,tag('rect'),{'x':'1180','y':'205','width':'240','height':'80'})
  g=E.SubElement(root,tag('g'),{'clip-path':'url(#building-outline)'})
- # Original page backgrounds are clipped to the physical footprint, keeping white corridors.
- content=copy.deepcopy(source.find('.//*[@id="visitor-map-content"]'))
- if name=='Ground':
-  # Keep indoor corridors white, while letting the shared green canvas show
-  # around the building. This fill does not clip or redraw source wall lines.
-  E.SubElement(g,tag('polygon'),{'points':' '.join(f'{x},{y}' for x,y in points),'fill':'white'})
-  for parent in content.iter():
-   for child in list(parent):
-    if child.tag==tag('path') and child.get('d')=='M3456 0H0V2304H3456V0Z' and child.get('fill')=='white':
-     parent.remove(child)
+ # November 19 exports flatten transforms and glyphs, and replace the named
+ # content layer with two nested masked groups. Coordinates remain unchanged.
+ original_content=source.find('.//*[@id="visitor-map-content"]')
+ if original_content is None:
+  original_content=source.find(tag('g')).find(tag('g'))
+ if original_content is None:
+  raise ValueError(f'{name}: cannot find map artwork')
+ content=copy.deepcopy(original_content)
+ # This outer mask belongs to the discarded sign frame. Inner artwork masks
+ # are copied with their definitions and must remain intact.
+ if content.get('mask'):
+  content.attrib.pop('mask')
+ # Keep indoor corridors white and the surrounding canvas transparent.
+ E.SubElement(g,tag('polygon'),{'points':' '.join(f'{x},{y}' for x,y in points),'fill':'white'})
+ for parent in content.iter():
+  if parent.tag==tag('mask'):
+   continue
+  for child in list(parent):
+   if (child.tag==tag('path') and child.get('fill')=='white'
+       and child.get('d') in {'M3456 0H0V2304H3456V0Z','M2553 80H-39V1808H2553V80Z',
+                              'M1075 205H565V253H1075V205Z'}):
+    parent.remove(child)
  # Remove only large rounded label chips, preserving glyph paths, room fills and symbols.
  label_colors={'#B6E4D0','#B9D9F6','#FFE7A3','#E8F2F7'}
+ # These three room-name chips duplicate original black glyphs. The fourth
+ # Second-floor chip is the sole Patient Check-in label and must keep its text.
+ duplicate_labels=('M1043.25 899.75H','M1283.25 741.5H','M1635.75 499.25H')
  for parent in content.iter():
   children=list(parent)
   for index,child in enumerate(children):
-   if (child.tag==tag('rect') and child.get('fill') in label_colors
-       and float(child.get('rx','0'))>=6 and 50<float(child.get('width','0'))<300):
+   # Flattened rounded rectangles start with a horizontal top edge followed
+   # by a cubic corner. Small legend swatches and all glyph paths stay intact.
+   edge=re.match(r'M([\d.]+) [\d.]+H([\d.]+)C',child.get('d',''))
+   rounded_path=(child.tag==tag('path') and edge is not None
+                 and 50<abs(float(edge[1])-float(edge[2]))<300)
+   rounded_rect=(child.tag==tag('rect') and float(child.get('rx','0'))>=6
+                 and 50<float(child.get('width','0'))<300)
+   if child.get('fill') in label_colors and (rounded_path or rounded_rect):
     parent.remove(child)
-    # First/Second chips duplicate existing lettering; Ground chips contain
-    # the sole room names, so preserve their glyphs after removing the box.
-    if name!='Ground' and index+1<len(children) and children[index+1].tag==tag('path'):
+    # These chips cover a complete original black label. Keep that original
+    # and remove its blue duplicate, which otherwise becomes overprinted.
+    if (name=='Second' and child.get('d','').startswith(duplicate_labels)
+        and index+1<len(children) and children[index+1].tag==tag('path')):
      parent.remove(children[index+1])
  g.append(content)
- if name!='Ground':
-  E.SubElement(root,tag('polygon'),{'points':' '.join(f'{x},{y}' for x,y in points),'fill':'none','stroke':'#426858','stroke-width':'2'})
  E.ElementTree(root).write(f'public/maps/{name.lower()}-building.svg',encoding='unicode')
  for part,box in [('notes','75 375 445 610'),('key','1800 450 420 850')]:
   if part=='key' and name=='First':box='1705 470 510 850'

@@ -56,7 +56,7 @@ node --check app.js
 node --test tests/positioning.test.mjs tests/gestures.test.mjs
 ```
 
-Ground 保留原始 SVG 的 209 个墙线元素，使用矩形裁切去除图外版式；白色室内填充与浅绿画布分开处理。足迹多边形仅辅助适配和位置分类，不替代其原始墙线。三个单层图不额外旋转或剪切。参见[当前校准说明](docs/calibration.md)。
+三层地图已更新为 2026-11-19 提供的 Team 2D corridor draft SVG，导入时统一使用原有文件名。生成过程保留源图墙线、房间文字和图标，去除标题、边框及标签底色，并消除 Second 的重复文字；一楼南北入口文字完整保留。白色室内填充与浅绿画布分开处理，足迹多边形不替代或裁切原始墙线。三个单层图不额外旋转或剪切，原定位校准保持不变。参见[当前校准说明](docs/calibration.md)。
 
 开发调试功能保留在 `app.js`，由 `ENABLE_LOCATION_DEBUG = false` 关闭。需要时可在本地显式开启；发布前必须恢复 `false`。关闭时面板隐藏、输入禁用、事件处理也会阻止测试模式启用；没有 URL 开关。
 

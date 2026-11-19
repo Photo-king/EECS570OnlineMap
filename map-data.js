@@ -27,7 +27,7 @@ for (const [id, corners] of Object.entries(sharedSvgCorners)) {
 // It is not a room or walkability boundary.
 const bounds = {
   ground: {left:720,top:290,right:1830,bottom:1470},
-  first: {left:540,top:240,right:1730,bottom:1430},
+  first: {left:540,top:195,right:1720,bottom:1540},
   second: {left:720,top:290,right:1830,bottom:1510},
 };
 for (const f of floors) f.bounds = bounds[f.id] || null;
